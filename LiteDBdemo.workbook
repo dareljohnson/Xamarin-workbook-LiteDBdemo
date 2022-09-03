@@ -1,0 +1,161 @@
+---
+packages:
+- id: LiteDB
+  version: 5.0.11
+- id: Newtonsoft.Json
+  version: 13.0.1
+uti: com.xamarin.workbook
+id: ab73e1a6-6d96-4937-a390-687c6291dee9
+title: LiteDBdemo
+platforms:
+- DotNetCore
+---
+
+```csharp
+#r "LiteDB"
+```
+
+```csharp
+#r "Newtonsoft.Json"
+```
+
+```csharp
+using LiteDB;
+```
+
+```csharp
+using System;
+```
+
+```csharp
+using System.IO;
+```
+
+```csharp
+// ImageFile collection class 
+public class ImageFile
+{
+    public int Id {get;set;}
+    public string FileName {get;set;}
+    public DateTime UploadDate {get;set;}
+}
+```
+
+```csharp
+// Phone collection class 
+public class Phone
+{
+    public string PhoneNumber {get;set;}
+    public string PhoneType {get;set;}
+}
+```
+
+```csharp
+// Create your POCO class entity
+public class Customer
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public List<Phone> Phones { get; set; }
+    public ImageFile ImageFile { get; set; }
+    public bool IsActive { get; set; }
+}
+```
+
+```csharp
+// Connection
+var _connectionString = @".\data\MyData.db";
+
+// Open database (or create if doesn't exist)
+using(var db = new LiteDatabase(_connectionString))
+{
+    // Get a collection (or create, if doesn't exist)
+    var col = db.GetCollection<Customer>("Customers");
+
+    // Create your new customer instance
+    var customer = new Customer
+    { 
+        Name = "John Doe", 
+        Phones = new List<Phone> { 
+            new Phone {PhoneNumber = "8000-0000", PhoneType= "Home" }, 
+            new Phone {PhoneNumber = "9000-0000", PhoneType = "Mobile"}}, 
+        ImageFile = new ImageFile{},
+        IsActive = true
+    };
+
+    // Insert new customer document (Id will be auto-incremented)
+    col.Insert(customer);
+
+    // Update a document inside a collection
+    customer.Name = "Darel Johnson";
+	customer.Phones.Add( new Phone{ PhoneNumber ="7000-1001", PhoneType = "Mobile"});
+
+    col.Update(customer);
+
+    // Index document using document Name property
+    col.EnsureIndex(x => x.Name);
+
+    // Use LINQ to query documents (filter, sort, transform)
+    var results = col.Query()
+        .Where(x => x.Name.StartsWith("D"))
+        .OrderBy(x => x.Name)
+        .Select(x => new { x.Name, NameUpper = x.Name.ToUpper() })
+        .Limit(10)
+        .ToList();
+    
+    foreach(var item in results){
+        Console.WriteLine(item.NameUpper);
+    }
+
+    // Let's create an index in phone numbers (using expression). It's a multikey index
+    col.EnsureIndex(x => x.Phones); 
+
+    // and now we can query phones
+    var r = col.FindOne(x=>x.Phones.FirstOrDefault().PhoneNumber == "8888-5555" );
+    
+    if(r !=null){
+        Console.WriteLine("Phone #: ", r.Name);
+    }else{
+        Console.WriteLine("No matching phone # found");
+    }
+    
+    // Get file storage with Int Id
+    var storage = db.GetStorage<int>("FileCollection","ChunksCollection");
+    
+    var ImageId = 123;
+
+    // Upload a file from file system to database  
+    storage.Upload(ImageId,"C:\\Users\\DarelJohnson\\OneDrive - Improving Enterprises\\Pictures\\darelJohnson-linkedin_photo.jpg");
+     
+    customer.ImageFile.Id = ImageId;
+    customer.ImageFile.FileName = storage.FindById(customer.ImageFile.Id).Filename;
+    customer.ImageFile.UploadDate = DateTime.UtcNow;
+    col.Update(customer);
+    
+    db.Checkpoint();
+
+    // Find file by Id 
+    var file = storage.FindById(customer.ImageFile.Id);
+
+    // Use LINQ to query documents (filter, sort, transform)
+    var fileCol = db.GetCollection<Customer>("Customers");
+    
+    var fileResults = fileCol.Query()
+        .Where(x=>x.ImageFile.Id == file.Id)
+        .OrderBy(x => x.ImageFile.FileName)
+        .Select(x => new { x.ImageFile.Id, x.ImageFile.FileName, x.ImageFile.UploadDate })
+        .Limit(1)
+        .ToList();
+    
+    foreach(var item in fileResults){
+        Console.WriteLine(item.Id  +", "+ item.FileName +", "+ item.UploadDate.ToUniversalTime().ToString("o"));
+        file.SaveAs(@"C:\development\xamarin_workbooks\uploads\" + item.FileName);
+    }
+    
+    // And download later
+    //file.SaveAs(@"C:\development\xamarin_workbooks\uploads\darelJohnson-linkedin_photo.jpg");
+
+}
+```
+
+Load the LiteDB Studio by launching Visual Studio and open the LiteDB.Studio (sln) solution. Build and run (F5) the LiteDB Studio.
